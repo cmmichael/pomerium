@@ -1,0 +1,48 @@
+# Prototype only, not part of any upstream PR: builds the binary and tries it on sample configs.
+name: validate prototype
+on:
+  push:
+    branches: [validate-command]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make get-envoy
+      - run: CGO_ENABLED=0 go build -o bin/pomerium ./cmd/pomerium
+      - run: bin/pomerium --version
+      - name: try it
+        run: |
+          set +e
+          export SHARED_SECRET=$(head -c32 /dev/urandom | base64) COOKIE_SECRET=$(head -c32 /dev/urandom | base64)
+          mkdir -p t
+          base='authenticate_service_url: https://auth.example.com
+          idp_provider: google
+          idp_client_id: x
+          idp_client_secret: y
+          insecure_server: true
+          address: :8080
+          '
+          printf '%s' "$base" | sed 's/^ *//' > t/base.yaml
+          { cat t/base.yaml; printf 'routes:\n  - from: https://a.example.com\n    to: http://127.0.0.1:9000\n    allow_any_authenticated_user: true\n'; } > t/good.yaml
+          { cat t/base.yaml; printf 'routes:\n  - from: not a url\n    to: http://127.0.0.1:9000\n'; } > t/bad-route.yaml
+          { cat t/base.yaml; printf 'routes: [\n'; } > t/bad-yaml.yaml
+          { cat t/base.yaml; printf 'routes:\n  - from: https://a.example.com\n    to: http://127.0.0.1:9000\n    regex_rewrite_pattern: "("\n    regex_rewrite_substitution: x\n'; } > t/envoy-only.yaml
+          for f in good bad-route bad-yaml envoy-only; do
+            for m in "" "--envoy"; do
+              echo "=== $f $m"
+              bin/pomerium validate --config t/$f.yaml $m 2>&1 | tail -n 6 | cut -c1-400
+              echo "exit=${PIPESTATUS[0]}"
+            done
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pomerium-validate-linux-amd64
+          path: bin/pomerium
+          retention-days: 7
