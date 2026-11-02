@@ -2175,3 +2175,26 @@ func setNullableUint32(
 func NewOptionsFromFile(configFile string) (*Options, error) {
 	return optionsFromViper(configFile)
 }
+
+// UnknownKeysFromFile returns the keys in the config file that Pomerium does not
+// recognize. Keys prefixed with "x-" are skipped: they are the conventional home
+// for YAML anchors.
+func UnknownKeysFromFile(configFile string) ([]string, error) {
+	o := NewDefaultOptions()
+	v := o.viper
+	v.SetConfigFile(configFile)
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read config: %w", err)
+	}
+	var metadata mapstructure.Metadata
+	if err := v.Unmarshal(o, ViperPolicyHooks, func(c *mapstructure.DecoderConfig) { c.Metadata = &metadata }); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+	var unknown []string
+	for _, check := range CheckUnknownConfigFields(metadata.Unused) {
+		if !strings.HasPrefix(check.Key, "x-") {
+			unknown = append(unknown, check.Key)
+		}
+	}
+	return unknown, nil
+}
