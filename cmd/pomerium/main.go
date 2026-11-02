@@ -33,6 +33,7 @@ func main() {
 	}
 	root.AddCommand(zero_cmd.BuildRootCmd())
 	root.AddCommand(health.BuildHealthCommand())
+	root.AddCommand(buildValidateCommand(&configFile))
 	root.PersistentFlags().StringVar(&configFile, "config", "", "Specify configuration file location")
 	log.SetLevel(zerolog.InfoLevel)
 

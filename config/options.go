@@ -2169,3 +2169,9 @@ func setNullableUint32(
 	}
 	*dst = null.Uint32From(*src)
 }
+
+// NewOptionsFromFile loads and validates the config file using the same checks
+// as startup and hot reload, without starting anything or registering metrics.
+func NewOptionsFromFile(configFile string) (*Options, error) {
+	return optionsFromViper(configFile)
+}
