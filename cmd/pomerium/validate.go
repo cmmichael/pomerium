@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -23,7 +24,7 @@ import (
 const envoyValidateTimeout = time.Minute
 
 func buildValidateCommand(configFile *string) *cobra.Command {
-	var withEnvoy bool
+	var withEnvoy, strict bool
 	cmd := &cobra.Command{
 		Use:          "validate",
 		Short:        "Check a configuration file without starting Pomerium",
@@ -37,6 +38,15 @@ func buildValidateCommand(configFile *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if strict {
+				unknown, err := config.UnknownKeysFromFile(*configFile)
+				if err != nil {
+					return err
+				}
+				if len(unknown) > 0 {
+					return fmt.Errorf("validate: unknown config options: %s", strings.Join(unknown, ", "))
+				}
+			}
 			if withEnvoy {
 				if err := validateEnvoyConfig(cmd.Context(), options); err != nil {
 					return err
@@ -47,6 +57,7 @@ func buildValidateCommand(configFile *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&withEnvoy, "envoy", false, "also check the generated config with envoy --mode validate")
+	cmd.Flags().BoolVar(&strict, "strict", false, "fail on unknown config options, except keys starting with x-")
 	return cmd
 }
 
